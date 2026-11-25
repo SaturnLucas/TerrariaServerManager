@@ -31,8 +31,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VER="1.0.${{ github.run_number }}"
-          cp app/build/outputs/apk/release/app-release.apk "TerrariaServer-$VER.apk"
-          gh release create "v$VER" "TerrariaServer-$VER.apk" \
-            --title "Terraria Server $VER" \
-            --notes "Build automatica $VER (commit ${GITHUB_SHA::7})." \
-            --target "${{ github.sha }}"
+          APK=$(find app/build/outputs -name "*.apk" | head -n 1)
+          if [ -z "$APK" ]; then echo "::error::APK nao encontrado"; exit 1; fi
+          cp "$APK" "TerrariaServer-$VER.apk"
+          if ! OUT=$(gh release create "v$VER" "TerrariaServer-$VER.apk" --repo "${{ github.repository }}" --title "Terraria Server $VER" --notes "Build automatica $VER" --target "${{ github.sha }}" 2>&1); then
+            echo "::error::$(echo "$OUT" | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "$OUT"
