@@ -1,0 +1,59 @@
+plugins {
+    id 'com.android.application'
+}
+
+def runNumber = (project.findProperty('runNumber') ?: '1').toString().toInteger()
+def repo = (project.findProperty('repoSlug') ?: 'SaturnLucas/TerrariaServerManager').toString()
+
+android {
+    namespace 'com.terrariaserver.manager'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.terrariaserver.manager'
+        minSdk 26
+        targetSdk 34
+        versionCode runNumber
+        versionName "1.0.${runNumber}"
+        buildConfigField "String", "REPO_SLUG", "\"${repo}\""
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('../release.keystore')
+            storePassword 'terraria123'
+            keyAlias 'terraria'
+            keyPassword 'terraria123'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.core:core:1.13.1'
+    implementation 'com.google.android.material:material:1.12.0'
+}
