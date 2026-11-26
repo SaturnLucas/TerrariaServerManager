@@ -7,24 +7,23 @@ public final class Scripts {
     private static String prefix() {
         return String.join("\n",
                 "export DEBIAN_FRONTEND=noninteractive",
-                "ROOT=\"$PREFIX/var/lib/proot-distro/installed-rootfs/debian\"",
                 "SHARED=/storage/emulated/0/TerrariaServer",
                 "mkdir -p \"$SHARED\" 2>/dev/null",
                 "BIND=\"\"",
                 "[ -w \"$SHARED\" ] && BIND=\"--bind $SHARED:/ts\"",
                 "command -v proot-distro >/dev/null 2>&1 || { pkg update -y && pkg install -y proot-distro curl; }",
-                "[ -d \"$ROOT\" ] || proot-distro install debian",
+                "proot-distro login debian -- true >/dev/null 2>&1 || proot-distro install debian",
                 "");
     }
 
     private static String runInner(String inner) {
         return String.join("\n",
                 "TASK=\".task-$$.sh\"",
-                "cat > \"$ROOT/root/$TASK\" <<'TS_INNER_EOF'",
+                "proot-distro login debian $BIND -- bash -c \"cat > /root/$TASK\" <<'TS_INNER_EOF'",
                 inner,
                 "TS_INNER_EOF",
                 "proot-distro login debian $BIND -- bash \"/root/$TASK\"",
-                "rm -f \"$ROOT/root/$TASK\"",
+                "proot-distro login debian -- rm -f \"/root/$TASK\"",
                 "");
     }
 
