@@ -4,23 +4,22 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.FileProvider;
 
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.textfield.TextInputEditText;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -31,24 +30,21 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.net.URL;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String PREFS = "prefs";
-    private static final String KEY_SERVER = "server";
-    private static final String KEY_PANEL = "panel";
-
     private final ExecutorService io = Executors.newCachedThreadPool();
     private final Handler ui = new Handler(Looper.getMainLooper());
 
-    private TextInputEditText etServer;
-    private TextInputEditText etPanel;
-    private TextView tvStatus;
+    private LinearLayout serverList;
+    private TextView tvEmpty;
+    private TextView tvTermux;
+    private MaterialButton btnTermuxInstall;
+    private MaterialButton btnTermuxPerm;
     private TextView tvUpdate;
     private ProgressBar progress;
     private MaterialButton btnInstall;
@@ -63,9 +59,11 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        etServer = findViewById(R.id.etServer);
-        etPanel = findViewById(R.id.etPanel);
-        tvStatus = findViewById(R.id.tvStatus);
+        serverList = findViewById(R.id.serverList);
+        tvEmpty = findViewById(R.id.tvEmpty);
+        tvTermux = findViewById(R.id.tvTermux);
+        btnTermuxInstall = findViewById(R.id.btnTermuxInstall);
+        btnTermuxPerm = findViewById(R.id.btnTermuxPerm);
         tvUpdate = findViewById(R.id.tvUpdate);
         progress = findViewById(R.id.progress);
         btnInstall = findViewById(R.id.btnInstall);
@@ -73,13 +71,17 @@ public class MainActivity extends AppCompatActivity {
 
         ((TextView) findViewById(R.id.tvVersion)).setText("Versão " + BuildConfig.VERSION_NAME);
 
-        SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
-        etServer.setText(sp.getString(KEY_SERVER, ""));
-        etPanel.setText(sp.getString(KEY_PANEL, ""));
-
-        findViewById(R.id.btnCheck).setOnClickListener(v -> checkServer());
-        findViewById(R.id.btnCopy).setOnClickListener(v -> copyIp());
-        findViewById(R.id.btnPanel).setOnClickListener(v -> openPanel());
+        findViewById(R.id.btnNew).setOnClickListener(v ->
+                startActivity(new Intent(this, ServerEditActivity.class)));
+        btnTermuxInstall.setOnClickListener(v -> startActivity(new Intent(Intent.ACTION_VIEW,
+                Uri.parse("https://github.com/termux/termux-app/releases"))));
+        btnTermuxPerm.setOnClickListener(v -> ActivityCompat.requestPermissions(this,
+                new String[]{TermuxBridge.PERMISSION}, 1));
+        findViewById(R.id.btnTermuxCopy).setOnClickListener(v -> {
+            ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(ClipData.newPlainText("Termux", Scripts.enableExternalApps()));
+            Toast.makeText(this, "Copiado. Cole no Termux e dê Enter.", Toast.LENGTH_LONG).show();
+        });
         btnUpdate.setOnClickListener(v -> checkUpdate(true));
         btnInstall.setOnClickListener(v -> downloadAndInstall());
 
@@ -89,6 +91,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        refreshServers();
+        refreshTermux();
         if (waitingInstallPermission && getPackageManager().canRequestPackageInstalls()) {
             waitingInstallPermission = false;
             if (apkFile != null && apkFile.exists()) {
@@ -99,85 +103,76 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private String text(TextInputEditText e) {
-        return e.getText() == null ? "" : e.getText().toString().trim();
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        super.onRequestPermissionsResult(code, perms, results);
+        refreshTermux();
     }
 
-    private void save() {
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                .putString(KEY_SERVER, text(etServer))
-                .putString(KEY_PANEL, text(etPanel))
-                .apply();
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density);
     }
 
-    // ---------- Servidor ----------
+    private void refreshTermux() {
+        boolean installed = TermuxBridge.installed(this);
+        boolean permitted = TermuxBridge.permitted(this);
+        if (!installed) {
+            tvTermux.setText("O servidor roda dentro do Termux (Android não executa o servidor do Terraria direto). "
+                    + "Instale o Termux pelo GitHub ou F-Droid (a versão da Play Store está desatualizada).");
+            btnTermuxInstall.setVisibility(View.VISIBLE);
+            btnTermuxPerm.setVisibility(View.GONE);
+        } else if (!permitted) {
+            tvTermux.setText("Termux instalado. Falta liberar o controle pelo app: toque no botão abaixo e aceite. "
+                    + "Depois toque em \"Copiar comando de preparação\", cole no Termux e dê Enter (uma vez só).");
+            btnTermuxInstall.setVisibility(View.GONE);
+            btnTermuxPerm.setVisibility(View.VISIBLE);
+        } else {
+            tvTermux.setText("Termux pronto. Se o botão Iniciar não abrir o Termux, rode uma vez o comando de "
+                    + "preparação abaixo. Na primeira vez o app instala Debian + mono (download grande, use Wi‑Fi).");
+            btnTermuxInstall.setVisibility(View.GONE);
+            btnTermuxPerm.setVisibility(View.GONE);
+        }
+    }
 
-    private void checkServer() {
-        save();
-        String s = text(etServer);
-        String h = s;
-        int p = 7777;
-        int idx = s.lastIndexOf(':');
-        if (idx > 0) {
-            h = s.substring(0, idx).trim();
-            try {
-                p = Integer.parseInt(s.substring(idx + 1).trim());
-            } catch (NumberFormatException e) {
-                Toast.makeText(this, "Porta inválida", Toast.LENGTH_SHORT).show();
-                return;
-            }
-        }
-        if (h.isEmpty()) {
-            Toast.makeText(this, "Digite o IP do servidor", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        final String host = h;
-        final int port = p;
-        tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_dim));
-        tvStatus.setText("Verificando...");
-        io.execute(() -> {
-            boolean ok = false;
-            try (Socket so = new Socket()) {
-                so.connect(new InetSocketAddress(host, port), 4000);
-                ok = true;
-            } catch (Exception ignored) {
-            }
-            final boolean result = ok;
-            ui.post(() -> {
-                tvStatus.setText(result ? "● Online" : "● Offline");
-                tvStatus.setTextColor(ContextCompat.getColor(this,
-                        result ? R.color.online : R.color.offline));
+    private void refreshServers() {
+        serverList.removeAllViews();
+        List<Profile> list = ProfileStore.load(this);
+        tvEmpty.setVisibility(list.isEmpty() ? View.VISIBLE : View.GONE);
+        for (Profile p : list) {
+            com.google.android.material.card.MaterialCardView card =
+                    new com.google.android.material.card.MaterialCardView(this);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.topMargin = dp(10);
+            card.setLayoutParams(lp);
+            card.setRadius(dp(18));
+            card.setCardElevation(0);
+            card.setCardBackgroundColor(0xFF1B2E22);
+            card.setStrokeColor(0xFF2F5238);
+            card.setStrokeWidth(dp(1));
+            LinearLayout in = new LinearLayout(this);
+            in.setOrientation(LinearLayout.VERTICAL);
+            in.setPadding(dp(16), dp(14), dp(16), dp(14));
+            TextView t = new TextView(this);
+            t.setText(p.name);
+            t.setTextColor(0xFFE6F3E8);
+            t.setTextSize(17);
+            t.setTypeface(null, android.graphics.Typeface.BOLD);
+            TextView s = new TextView(this);
+            s.setText("Terraria " + p.versionName() + " • " + Catalog.DIFFICULTIES[p.difficulty]
+                    + " • Mundo " + Catalog.SIZES[p.size] + " • porta " + p.port);
+            s.setTextColor(0xFF9DB5A2);
+            s.setTextSize(13);
+            in.addView(t);
+            in.addView(s);
+            card.addView(in);
+            card.setOnClickListener(v -> {
+                Intent i = new Intent(this, ServerDetailActivity.class);
+                i.putExtra("id", p.id);
+                startActivity(i);
             });
-        });
-    }
-
-    private void copyIp() {
-        save();
-        String s = text(etServer);
-        if (s.isEmpty()) {
-            Toast.makeText(this, "Nada para copiar", Toast.LENGTH_SHORT).show();
-            return;
+            serverList.addView(card);
         }
-        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        cm.setPrimaryClip(ClipData.newPlainText("IP do servidor", s));
-        Toast.makeText(this, "IP copiado", Toast.LENGTH_SHORT).show();
-    }
-
-    // ---------- Painel ----------
-
-    private void openPanel() {
-        save();
-        String url = text(etPanel);
-        if (url.isEmpty()) {
-            Toast.makeText(this, "Cole o endereço do painel", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            url = "https://" + url;
-        }
-        Intent i = new Intent(this, PanelActivity.class);
-        i.putExtra("url", url);
-        startActivity(i);
     }
 
     // ---------- Atualizacoes ----------
@@ -269,7 +264,6 @@ public class MainActivity extends AppCompatActivity {
         }
         btnInstall.setEnabled(false);
         progress.setProgress(0);
-        progress.setIndeterminate(false);
         progress.setVisibility(View.VISIBLE);
         tvUpdate.setText("Baixando atualização... 0%");
         final String urlStr = downloadUrl;
