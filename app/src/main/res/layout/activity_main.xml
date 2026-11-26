@@ -165,7 +165,7 @@
                     android:layout_marginTop="10dp"
                     android:lineSpacingExtra="3dp"
                     android:text="Toque em verificar para buscar novas versões."
-                    
+                    android:textColor="@color/text_dim"
                     android:textSize="15sp" />
                 <ProgressBar
                     android:id="@+id/progress"
@@ -218,8 +218,8 @@
                     android:layout_marginTop="10dp"
                     android:lineSpacingExtra="3dp"
                     android:text="O Terraria do Android só entra em servidor cuja versão seja IGUAL à do app mobile. Ao criar o servidor, escolha a mesma versão do seu jogo. Se o seu Terraria mobile estiver atrás da versão mais recente do PC, escolha uma versão anterior da lista."
-                    android:textColor="@color/text_dim"
-                    android:textSize="15sp" android:textColor="@color/text" />
+                    android:textColor="@color/text"
+                    android:textSize="15sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
