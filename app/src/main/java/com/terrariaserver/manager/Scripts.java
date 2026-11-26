@@ -75,7 +75,13 @@ public final class Scripts {
                 "  echo '>> Servidor iniciado! Porta " + p.port + ". Volte ao app Terraria Server.'",
                 "else",
                 "  echo '>> Falha ao iniciar. Veja o log em ' $SD/server.log",
-                "fi");
+                "fi",
+                "LOG=" + sd + "/server.log",
+                "if [ -d /ts ]; then mkdir -p /ts/" + p.id + "; LOG=/ts/" + p.id + "/server.log; fi",
+                "touch \"$LOG\"",
+                "echo '>> Acompanhando o servidor ao vivo. Mundo grande pode levar varios minutos para gerar.'",
+                "echo '>> O servidor so aceita jogadores depois de aparecer: Server started. Ctrl+C sai daqui e ele continua rodando.'",
+                "tail -n 60 -f \"$LOG\"");
         return prefix()
                 + "termux-wake-lock 2>/dev/null || true\n"
                 + runInner(inner)
