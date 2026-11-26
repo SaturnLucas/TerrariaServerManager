@@ -2,7 +2,6 @@ package com.terrariaserver.manager;
 
 import android.os.Bundle;
 import android.text.InputType;
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
@@ -25,10 +24,9 @@ public class ServerEditActivity extends AppCompatActivity {
     private LinearLayout root;
     private Profile p;
 
-    private TextInputEditText etName, etWorld, etSeed, etMax, etPort, etPass, etMotd;
-    private MaterialAutoCompleteTextView ddVersion, ddSize, ddDiff, ddSeed, ddLang, ddJourney;
+    private TextInputEditText etName, etMax, etPort, etPass, etMotd;
+    private MaterialAutoCompleteTextView ddVersion, ddLang, ddJourney;
     private MaterialSwitch swSecure, swUpnp, swNpc;
-    private TextInputLayout tilSeed, tilJourney;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,19 +50,9 @@ public class ServerEditActivity extends AppCompatActivity {
         section("Servidor");
         etName = text("Nome do servidor", p.name, InputType.TYPE_CLASS_TEXT);
         ddVersion = dropdown("Versão do Terraria", Catalog.VERSION_LABELS, p.version);
-        note("Use a MESMA versão do Terraria do seu celular para conseguir entrar. A 1.4.6 não funciona em celular (falta uma biblioteca que só existe para PC). Se trocar a versão de um mundo já criado, mude também o nome do mundo: versão antiga não abre mundo de versão nova.");
-
-        section("Mundo");
-        etWorld = text("Nome do mundo", p.world, InputType.TYPE_CLASS_TEXT);
-        ddSize = dropdown("Tamanho", Catalog.SIZES, p.size);
-        ddDiff = dropdown("Dificuldade", Catalog.DIFFICULTIES, p.difficulty);
-        ddSeed = dropdown("Seed / tipo de mundo", Catalog.SEED_LABELS, p.seedPreset);
-        etSeed = text("Seed personalizada", p.seedCustom, InputType.TYPE_CLASS_TEXT);
-        tilSeed = (TextInputLayout) etSeed.getParent().getParent();
-        ddJourney = dropdown("Poderes do modo Jornada", Catalog.JOURNEY_LABELS, p.journey);
-        tilJourney = (TextInputLayout) ddJourney.getParent().getParent();
-        note("Tamanho, dificuldade e seed só valem ao CRIAR o mundo. Para gerar outro mundo, mude o nome dele. "
-                + "Corruption ou Crimson é sorteado pela seed (use a seed Drunk para ter os dois).");
+        note("Use a MESMA versão do Terraria do seu celular para conseguir entrar. A 1.4.6 não funciona em celular "
+                + "(falta uma biblioteca que só existe para PC). Versão antiga não abre mundo criado por versão nova: "
+                + "ao trocar de versão, crie um mundo novo.");
 
         section("Jogadores e rede");
         etMax = text("Máximo de jogadores (1 a 255)", String.valueOf(p.maxPlayers), InputType.TYPE_CLASS_NUMBER);
@@ -72,25 +60,17 @@ public class ServerEditActivity extends AppCompatActivity {
         etPass = text("Senha (vazio = sem senha)", p.password, InputType.TYPE_CLASS_TEXT);
         etMotd = text("Mensagem do dia (MOTD)", p.motd, InputType.TYPE_CLASS_TEXT);
         ddLang = dropdown("Idioma do servidor", Catalog.LANG_LABELS, p.language);
+        ddJourney = dropdown("Poderes do modo Jornada (só em mundo Jornada)", Catalog.JOURNEY_LABELS, p.journey);
         swSecure = toggle("Proteção anti-cheat (secure)", p.secure);
         swNpc = toggle("Inimigos mais suaves (npcstream, usa mais internet)", p.smoothNpc);
         swUpnp = toggle("Abrir porta automaticamente (UPnP)", p.upnp);
+        note("O mundo (tamanho, dificuldade, seed) você escolhe ou cria na tela do servidor.");
 
         MaterialButton save = new MaterialButton(this, null, 0);
         save.setText("Salvar servidor");
-        styleButton(save, true);
+        styleButton(save);
         save.setOnClickListener(v -> save());
         root.addView(save, lpTop(20));
-
-        ddSeed.setOnItemClickListener((a, v, pos, idl) -> updateVisibility());
-        ddDiff.setOnItemClickListener((a, v, pos, idl) -> updateVisibility());
-        updateVisibility();
-    }
-
-    private void updateVisibility() {
-        tilSeed.setVisibility(index(ddSeed, Catalog.SEED_LABELS) == Catalog.SEED_CUSTOM
-                ? View.VISIBLE : View.GONE);
-        tilJourney.setVisibility(index(ddDiff, Catalog.DIFFICULTIES) == 3 ? View.VISIBLE : View.GONE);
     }
 
     private int dp(int v) {
@@ -131,16 +111,14 @@ public class ServerEditActivity extends AppCompatActivity {
         root.addView(v, lpTop(8));
     }
 
-    private void styleButton(MaterialButton b, boolean filled) {
+    private void styleButton(MaterialButton b) {
         b.setAllCaps(false);
         b.setTextSize(16);
         b.setTypeface(null, android.graphics.Typeface.BOLD);
         b.setMinHeight(dp(56));
         b.setCornerRadius(dp(16));
-        if (filled) {
-            b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF5FD068));
-            b.setTextColor(0xFF07200C);
-        }
+        b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF5FD068));
+        b.setTextColor(0xFF07200C);
     }
 
     private TextInputEditText text(String hint, String value, int inputType) {
@@ -181,8 +159,7 @@ public class ServerEditActivity extends AppCompatActivity {
     }
 
     private int index(MaterialAutoCompleteTextView d, String[] items) {
-        int i = Arrays.asList(items).indexOf(d.getText().toString());
-        return Math.max(i, 0);
+        return Math.max(Arrays.asList(items).indexOf(d.getText().toString()), 0);
     }
 
     private String str(TextInputEditText e) {
@@ -215,11 +192,6 @@ public class ServerEditActivity extends AppCompatActivity {
         }
         p.name = name;
         p.version = index(ddVersion, Catalog.VERSION_LABELS);
-        p.world = str(etWorld).isEmpty() ? "Mundo" : str(etWorld);
-        p.size = index(ddSize, Catalog.SIZES);
-        p.difficulty = index(ddDiff, Catalog.DIFFICULTIES);
-        p.seedPreset = index(ddSeed, Catalog.SEED_LABELS);
-        p.seedCustom = str(etSeed);
         p.journey = index(ddJourney, Catalog.JOURNEY_LABELS);
         p.maxPlayers = max;
         p.port = port;

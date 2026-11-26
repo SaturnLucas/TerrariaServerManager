@@ -159,8 +159,7 @@ public class MainActivity extends AppCompatActivity {
             t.setTextSize(17);
             t.setTypeface(null, android.graphics.Typeface.BOLD);
             TextView s = new TextView(this);
-            s.setText("Terraria " + p.versionName() + " • " + Catalog.DIFFICULTIES[p.difficulty]
-                    + " • Mundo " + Catalog.SIZES[p.size] + " • porta " + p.port);
+            s.setText("Terraria " + p.versionName() + " • mundo " + p.worldFile() + " • porta " + p.port);
             s.setTextColor(0xFF9DB5A2);
             s.setTextSize(13);
             in.addView(t);

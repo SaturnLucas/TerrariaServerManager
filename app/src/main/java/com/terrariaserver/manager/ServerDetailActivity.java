@@ -11,7 +11,12 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -22,6 +27,7 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 
 import java.io.File;
 import java.io.RandomAccessFile;
@@ -30,7 +36,10 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -40,7 +49,7 @@ public class ServerDetailActivity extends AppCompatActivity {
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     private Profile p;
-    private TextView tvStatus, tvLog, tvAddress, tvSummary, tvName;
+    private TextView tvStatus, tvLog, tvAddress, tvSummary, tvName, tvStep, tvWorld;
     private TextInputEditText etCmd;
     private boolean active = false;
 
@@ -52,6 +61,7 @@ public class ServerDetailActivity extends AppCompatActivity {
             }
             checkStatus();
             readLog();
+            refreshWorld();
             ui.postDelayed(this, 3000);
         }
     };
@@ -69,40 +79,15 @@ public class ServerDetailActivity extends AppCompatActivity {
         tvName = findViewById(R.id.tvName);
         tvSummary = findViewById(R.id.tvSummary);
         tvStatus = findViewById(R.id.tvStatus);
+        tvStep = findViewById(R.id.tvStep);
+        tvWorld = findViewById(R.id.tvWorld);
         tvAddress = findViewById(R.id.tvAddress);
         tvLog = findViewById(R.id.tvLog);
         etCmd = findViewById(R.id.etCmd);
 
-        findViewById(R.id.btnStart).setOnClickListener(v -> {
-            if (!ready()) {
-                return;
-            }
-            if (!getSharedPreferences("prefs", MODE_PRIVATE).getBoolean("termux_prepped", false)) {
-                new MaterialAlertDialogBuilder(this)
-                        .setTitle("Preparar o Termux (uma vez)")
-                        .setMessage("O Termux só aceita comandos do app depois de rodar um comando de preparação.\n\n"
-                                + "1. Toque em \"Copiar e abrir Termux\".\n"
-                                + "2. No Termux, cole (segure na tela > Colar) e dê Enter. Aceite a permissão de armazenamento.\n"
-                                + "3. Volte ao app e toque em \"Já fiz\".")
-                        .setPositiveButton("Copiar e abrir Termux", (d, w) -> {
-                            copy("Termux", Scripts.enableExternalApps());
-                            Intent li = getPackageManager().getLaunchIntentForPackage("com.termux");
-                            if (li != null) {
-                                startActivity(li);
-                            }
-                        })
-                        .setNeutralButton("Já fiz", (d, w) -> {
-                            getSharedPreferences("prefs", MODE_PRIVATE).edit()
-                                    .putBoolean("termux_prepped", true).apply();
-                            TermuxBridge.run(this, Scripts.start(p), true);
-                        })
-                        .setNegativeButton("Cancelar", null)
-                        .show();
-                return;
-            }
-            TermuxBridge.run(this, Scripts.start(p), true);
-            Toast.makeText(this, "Abrindo o Termux para iniciar...", Toast.LENGTH_LONG).show();
-        });
+        findViewById(R.id.btnStart).setOnClickListener(v -> startServer());
+        findViewById(R.id.btnChooseWorld).setOnClickListener(v -> chooseWorld());
+        findViewById(R.id.btnCreateWorld).setOnClickListener(v -> createWorldDialog());
         findViewById(R.id.btnStop).setOnClickListener(v -> send("exit"));
         findViewById(R.id.btnSave).setOnClickListener(v -> send("save"));
         findViewById(R.id.btnBackup).setOnClickListener(v -> {
@@ -132,7 +117,7 @@ public class ServerDetailActivity extends AppCompatActivity {
         findViewById(R.id.btnDelete).setOnClickListener(v ->
                 new MaterialAlertDialogBuilder(this)
                         .setTitle("Excluir servidor?")
-                        .setMessage("Remove só este perfil do app. Os arquivos do mundo ficam no Termux.")
+                        .setMessage("Remove só este perfil do app. Os mundos continuam em Armazenamento/TerrariaServer.")
                         .setPositiveButton("Excluir", (d, w) -> {
                             ProfileStore.delete(this, p.id);
                             finish();
@@ -150,7 +135,7 @@ public class ServerDetailActivity extends AppCompatActivity {
             b.setOnClickListener(v -> send(c));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            lp.rightMargin = (int) (8 * getResources().getDisplayMetrics().density);
+            lp.rightMargin = dp(8);
             quick.addView(b, lp);
         }
 
@@ -164,13 +149,7 @@ public class ServerDetailActivity extends AppCompatActivity {
         if (fresh != null) {
             p = fresh;
         }
-        tvName.setText(p.name);
-        tvSummary.setText("Terraria " + p.versionName() + " • Mundo " + p.worldFile() + " ("
-                + Catalog.SIZES[p.size] + ") • " + Catalog.DIFFICULTIES[p.difficulty]
-                + " • até " + p.maxPlayers + " jogadores");
-        String lan = localIp();
-        tvAddress.setText("Mesma rede Wi‑Fi: " + (lan == null ? "sem rede" : lan + ":" + p.port)
-                + "\nFora de casa: precisa liberar a porta " + p.port + " no roteador ou usar um túnel/VPN.");
+        updateTexts();
         active = true;
         ui.post(ticker);
     }
@@ -180,6 +159,18 @@ public class ServerDetailActivity extends AppCompatActivity {
         super.onPause();
         active = false;
         ui.removeCallbacks(ticker);
+    }
+
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density);
+    }
+
+    private void updateTexts() {
+        tvName.setText(p.name);
+        tvSummary.setText("Terraria " + p.versionName() + " • até " + p.maxPlayers + " jogadores • porta " + p.port);
+        String lan = localIp();
+        tvAddress.setText("Mesma rede Wi‑Fi: " + (lan == null ? "sem rede" : lan + ":" + p.port)
+                + "\nFora de casa: precisa liberar a porta " + p.port + " no roteador ou usar um túnel.");
     }
 
     private String ipPort() {
@@ -211,6 +202,202 @@ public class ServerDetailActivity extends AppCompatActivity {
             Toast.makeText(this, "Comando enviado: " + cmd, Toast.LENGTH_SHORT).show();
         }
     }
+
+    // ---------- Iniciar ----------
+
+    private void startServer() {
+        if (!ready()) {
+            return;
+        }
+        if (!hasStorage()) {
+            askStorage();
+            Toast.makeText(this, "Permita \"acesso a todos os arquivos\", volte e toque em Iniciar de novo",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (!getSharedPreferences("prefs", MODE_PRIVATE).getBoolean("termux_prepped", false)) {
+            new MaterialAlertDialogBuilder(this)
+                    .setTitle("Preparar o Termux (uma vez)")
+                    .setMessage("O Termux só aceita comandos do app depois de rodar um comando de preparação.\n\n"
+                            + "1. Toque em \"Copiar e abrir Termux\".\n"
+                            + "2. No Termux, cole (segure na tela > Colar) e dê Enter. Aceite a permissão de armazenamento.\n"
+                            + "3. Volte ao app e toque em \"Já fiz\". Depois disso você não precisa mais olhar o Termux.")
+                    .setPositiveButton("Copiar e abrir Termux", (d, w) -> {
+                        copy("Termux", Scripts.enableExternalApps());
+                        Intent li = getPackageManager().getLaunchIntentForPackage("com.termux");
+                        if (li != null) {
+                            startActivity(li);
+                        }
+                    })
+                    .setNeutralButton("Já fiz", (d, w) -> {
+                        getSharedPreferences("prefs", MODE_PRIVATE).edit()
+                                .putBoolean("termux_prepped", true).apply();
+                        startServer();
+                    })
+                    .setNegativeButton("Cancelar", null)
+                    .show();
+            return;
+        }
+        TermuxBridge.run(this, Scripts.start(p), false);
+        tvStep.setText(">> Comando enviado. O progresso aparece abaixo.");
+        Toast.makeText(this, "Iniciando... acompanhe o progresso aqui no app", Toast.LENGTH_LONG).show();
+    }
+
+    // ---------- Mundos ----------
+
+    private File worldsDir() {
+        return new File("/storage/emulated/0/TerrariaServer/" + p.id + "/worlds");
+    }
+
+    private List<File> listWorlds() {
+        List<File> out = new ArrayList<>();
+        try {
+            File[] fs = worldsDir().listFiles();
+            if (fs != null) {
+                Arrays.sort(fs);
+                for (File f : fs) {
+                    if (f.getName().endsWith(".wld")) {
+                        out.add(f);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    private void refreshWorld() {
+        String active = p.worldFile();
+        boolean exists = false;
+        for (File f : listWorlds()) {
+            if (f.getName().equals(active + ".wld")) {
+                exists = true;
+            }
+        }
+        tvWorld.setText("Mundo ativo: " + active + (exists
+                ? "\nPronto para jogar."
+                : "\nAinda não criado: será gerado ao iniciar ("
+                + Catalog.SIZES[p.size] + ", " + Catalog.DIFFICULTIES[p.difficulty] + ")."));
+    }
+
+    private void chooseWorld() {
+        List<File> ws = listWorlds();
+        if (ws.isEmpty()) {
+            Toast.makeText(this, hasStorage() ? "Nenhum mundo criado ainda. Toque em Criar novo mundo."
+                    : "Permita acesso a todos os arquivos para listar os mundos.", Toast.LENGTH_LONG).show();
+            if (!hasStorage()) {
+                askStorage();
+            }
+            return;
+        }
+        final String[] names = new String[ws.size()];
+        int checked = 0;
+        for (int i = 0; i < names.length; i++) {
+            names[i] = ws.get(i).getName().replace(".wld", "");
+            if (names[i].equals(p.worldFile())) {
+                checked = i;
+            }
+        }
+        final int[] sel = {checked};
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Escolher mundo")
+                .setSingleChoiceItems(names, checked, (d, w) -> sel[0] = w)
+                .setPositiveButton("Usar e iniciar", (d, w) -> {
+                    p.world = names[sel[0]];
+                    ProfileStore.upsert(this, p);
+                    refreshWorld();
+                    startServer();
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private TextInputEditText dlgField(LinearLayout box, String hint) {
+        TextInputLayout til = new TextInputLayout(this, null,
+                com.google.android.material.R.attr.textInputOutlinedStyle);
+        til.setHint(hint);
+        TextInputEditText e = new TextInputEditText(til.getContext());
+        e.setSingleLine(true);
+        til.addView(e);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+        box.addView(til, lp);
+        return e;
+    }
+
+    private Spinner dlgSpinner(LinearLayout box, String label, String[] items, int sel) {
+        TextView l = new TextView(this);
+        l.setText(label);
+        l.setTextColor(0xFF9DB5A2);
+        l.setTextSize(13);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(14);
+        box.addView(l, lp);
+        Spinner s = new Spinner(this);
+        s.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items));
+        s.setSelection(sel);
+        box.addView(s);
+        return s;
+    }
+
+    private void createWorldDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(10), dp(22), dp(0));
+        TextInputEditText etName = dlgField(box, "Nome do mundo");
+        Spinner spSize = dlgSpinner(box, "Tamanho", Catalog.SIZES, 1);
+        Spinner spDiff = dlgSpinner(box, "Dificuldade", Catalog.DIFFICULTIES, 0);
+        Spinner spSeed = dlgSpinner(box, "Seed / tipo de mundo", Catalog.SEED_LABELS, 0);
+        TextInputEditText etSeed = dlgField(box, "Seed personalizada");
+        ((View) etSeed.getParent().getParent()).setVisibility(View.GONE);
+        spSeed.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                ((View) etSeed.getParent().getParent()).setVisibility(
+                        pos == Catalog.SEED_CUSTOM ? View.VISIBLE : View.GONE);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+
+        androidx.appcompat.app.AlertDialog dlg = new MaterialAlertDialogBuilder(this)
+                .setTitle("Criar novo mundo")
+                .setView(box)
+                .setPositiveButton("Criar e iniciar", null)
+                .setNegativeButton("Cancelar", null)
+                .create();
+        dlg.setOnShowListener(x -> dlg.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(v -> {
+                    String name = etName.getText() == null ? "" : etName.getText().toString().trim();
+                    if (name.isEmpty()) {
+                        Toast.makeText(this, "Dê um nome ao mundo", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String file = name.replaceAll("[^A-Za-z0-9_-]", "_");
+                    for (File f : listWorlds()) {
+                        if (f.getName().equals(file + ".wld")) {
+                            Toast.makeText(this, "Já existe um mundo com esse nome", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                    }
+                    p.world = name;
+                    p.size = spSize.getSelectedItemPosition();
+                    p.difficulty = spDiff.getSelectedItemPosition();
+                    p.seedPreset = spSeed.getSelectedItemPosition();
+                    p.seedCustom = etSeed.getText() == null ? "" : etSeed.getText().toString().trim();
+                    ProfileStore.upsert(this, p);
+                    dlg.dismiss();
+                    refreshWorld();
+                    startServer();
+                }));
+        dlg.show();
+    }
+
+    // ---------- Status e console ----------
 
     private static String localIp() {
         try {
@@ -269,30 +456,49 @@ public class ServerDetailActivity extends AppCompatActivity {
 
     private void readLog() {
         if (!hasStorage()) {
-            tvLog.setText("Toque aqui e permita \"acesso a todos os arquivos\" para ver o console do servidor.");
+            tvLog.setText("Toque aqui e permita \"acesso a todos os arquivos\" para ver o progresso e o console.");
             return;
         }
         final File f = new File("/storage/emulated/0/TerrariaServer/" + p.id + "/server.log");
         io.execute(() -> {
             String t;
+            String step = null;
             try {
                 if (!f.exists()) {
-                    t = "O console aparece aqui assim que o servidor iniciar.";
+                    t = "O progresso e o console aparecem aqui depois que você tocar em Iniciar.";
                 } else {
                     try (RandomAccessFile r = new RandomAccessFile(f, "r")) {
                         long len = r.length();
-                        long start = Math.max(0, len - 5000);
+                        long start = Math.max(0, len - 6000);
                         r.seek(start);
                         byte[] b = new byte[(int) (len - start)];
                         r.readFully(b);
-                        t = new String(b, "UTF-8");
+                        String raw = new String(b, "UTF-8").replace("\r", "\n");
+                        String[] lines = raw.split("\n");
+                        StringBuilder sb = new StringBuilder();
+                        int from = Math.max(0, lines.length - 40);
+                        for (int i = 0; i < lines.length; i++) {
+                            if (lines[i].startsWith(">>")) {
+                                step = lines[i];
+                            }
+                            if (i >= from) {
+                                sb.append(lines[i]).append("\n");
+                            }
+                        }
+                        t = sb.toString();
                     }
                 }
             } catch (Exception e) {
                 t = "Não foi possível ler o log: " + e.getMessage();
             }
             final String fin = t;
-            ui.post(() -> tvLog.setText(fin));
+            final String fs = step;
+            ui.post(() -> {
+                tvLog.setText(fin);
+                if (fs != null) {
+                    tvStep.setText(fs);
+                }
+            });
         });
     }
 }

@@ -1,47 +1,33 @@
 package com.terrariaserver.manager;
 
 /**
- * Scripts executados no Termux.
- * O tmux roda no TERMUX e segura o login do proot-distro aberto: o proot-distro mata
- * todos os processos quando o login termina, entao o servidor precisa viver dentro dele.
+ * Scripts executados no Termux em segundo plano. Tudo e registrado em
+ * Armazenamento/TerrariaServer/<id>/server.log, que o app mostra na tela.
+ * O tmux roda no TERMUX e segura o login do proot-distro aberto (o proot-distro mata
+ * todos os processos quando o login termina).
  */
 public final class Scripts {
     private Scripts() {}
 
-    private static String prefix() {
-        return String.join("\n",
-                "export DEBIAN_FRONTEND=noninteractive",
-                "SHARED=/storage/emulated/0/TerrariaServer",
-                "mkdir -p \"$SHARED\" 2>/dev/null",
-                "BIND=\"\"",
-                "[ -w \"$SHARED\" ] && BIND=\"--bind $SHARED:/ts\"",
-                "command -v proot-distro >/dev/null 2>&1 || { pkg update -y && pkg install -y proot-distro curl; }",
-                "command -v tmux >/dev/null 2>&1 || pkg install -y tmux",
-                "proot-distro login debian -- true >/dev/null 2>&1 || proot-distro install debian",
-                "");
-    }
-
-    /** Executa um script dentro do Debian (envia o arquivo pelo proprio proot). */
     private static String runInner(String inner) {
         return String.join("\n",
                 "TASK=\".task-$$.sh\"",
                 "proot-distro login debian $BIND -- bash -c \"cat > /root/$TASK\" <<'TS_INNER_EOF'",
                 inner,
                 "TS_INNER_EOF",
-                "proot-distro login debian $BIND -- bash \"/root/$TASK\"",
+                "proot-distro login debian $BIND -- bash \"/root/$TASK\" || { echo '>> ERRO durante a instalacao (veja as linhas acima)'; exit 1; }",
                 "proot-distro login debian -- rm -f \"/root/$TASK\"",
                 "");
     }
 
-    /** Instala o que falta, grava a config e inicia o servidor dentro de um tmux do Termux. */
     public static String start(Profile p) {
         String code = p.versionCode();
         String sd = p.dir();
+        String name = "ts-" + p.id;
         String run = String.join("\n",
                 "#!/bin/bash",
                 "export TERM=xterm",
-                "LOG=" + sd + "/server.log",
-                "if [ -d /ts ]; then mkdir -p /ts/" + p.id + "; LOG=/ts/" + p.id + "/server.log; fi",
+                "LOG=/ts/" + p.id + "/server.log",
                 "cd /root/terraria/" + code + "/Linux",
                 "mono --server --gc=sgen -O=all ./TerrariaServer.exe -config " + sd
                         + "/serverconfig.txt 2>&1 | sed -u 's/\\x1b\\[[0-9;?]*[a-zA-Z]//g' | tee -a \"$LOG\"");
@@ -49,15 +35,16 @@ public final class Scripts {
                 "set -e",
                 "export DEBIAN_FRONTEND=noninteractive TERM=xterm",
                 "if ! command -v mono >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then",
-                "  echo '>> Instalando mono e ferramentas (primeira vez, pode demorar)...'",
-                "  apt-get update && apt-get install -y mono-complete unzip curl ca-certificates",
+                "  echo '>> [3/4] Instalando mono (so na primeira vez, 10 a 20 min, nao feche o app)...'",
+                "  apt-get update -qq >/dev/null || true",
+                "  apt-get install -y -qq mono-complete unzip curl ca-certificates >/dev/null",
                 "fi",
                 "CODE=" + code,
                 "BASE=/root/terraria/$CODE",
                 "if [ ! -f \"$BASE/Linux/TerrariaServer.exe\" ]; then",
-                "  echo '>> Baixando servidor oficial do Terraria " + p.versionName() + "...'",
+                "  echo '>> [3/4] Baixando o servidor oficial do Terraria " + p.versionName() + "...'",
                 "  mkdir -p /root/terraria && cd /root/terraria",
-                "  curl -fL -o srv-$CODE.zip https://terraria.org/api/download/pc-dedicated-server/terraria-server-$CODE.zip",
+                "  curl -fsSL -o srv-$CODE.zip https://terraria.org/api/download/pc-dedicated-server/terraria-server-$CODE.zip",
                 "  rm -rf tmp-$CODE && mkdir tmp-$CODE && unzip -q srv-$CODE.zip -d tmp-$CODE",
                 "  rm -rf \"$BASE\" && mkdir -p \"$BASE\"",
                 "  cp -r tmp-$CODE/*/. \"$BASE/\"",
@@ -65,33 +52,45 @@ public final class Scripts {
                 "  cd \"$BASE/Linux\" && rm -f System*.dll Mono*.dll monoconfig mscorlib.dll",
                 "fi",
                 "SD=" + sd,
-                "mkdir -p \"$SD/worlds\"",
-                "touch \"$SD/banlist.txt\"",
+                "mkdir -p \"$SD\" /ts/" + p.id + "/worlds",
+                "touch /ts/" + p.id + "/banlist.txt",
                 "cat > \"$SD/serverconfig.txt\" <<'TS_CFG_EOF'",
                 p.config().trim(),
                 "TS_CFG_EOF",
                 "cat > \"$SD/run.sh\" <<'TS_RUN_EOF'",
                 run,
                 "TS_RUN_EOF",
-                "chmod +x \"$SD/run.sh\"",
-                "echo '>> Preparo concluido.'");
-        String name = "ts-" + p.id;
-        return prefix()
-                + "termux-wake-lock 2>/dev/null || true\n"
-                + runInner(inner)
-                + String.join("\n",
+                "chmod +x \"$SD/run.sh\"");
+        return String.join("\n",
+                "export DEBIAN_FRONTEND=noninteractive",
+                "SHARED=/storage/emulated/0/TerrariaServer",
+                "D=\"$SHARED/" + p.id + "\"",
+                "mkdir -p \"$D/worlds\" \"$D/backups\" 2>/dev/null",
+                "if [ ! -w \"$D\" ]; then echo 'Sem acesso ao armazenamento: rode termux-setup-storage no Termux' > \"$HOME/terraria-erro.txt\"; exit 1; fi",
+                ": > \"$D/server.log\"",
+                "exec >> \"$D/server.log\" 2>&1",
+                "BIND=\"--bind $SHARED:/ts\"",
+                "echo '>> [1/4] Preparando o Termux...'",
+                "termux-wake-lock 2>/dev/null || true",
+                "if ! { command -v proot-distro && command -v tmux && command -v curl; } >/dev/null 2>&1; then",
+                "  pkg update -y >/dev/null 2>&1",
+                "  pkg install -y proot-distro tmux curl >/dev/null 2>&1",
+                "fi",
+                "command -v proot-distro >/dev/null 2>&1 || { echo '>> ERRO: nao consegui instalar o proot-distro (sem internet?)'; exit 1; }",
+                "echo '>> [2/4] Preparando o Debian (so na primeira vez)...'",
+                "proot-distro login debian -- true >/dev/null 2>&1 || proot-distro install debian >/dev/null 2>&1",
+                "proot-distro login debian -- true >/dev/null 2>&1 || { echo '>> ERRO: nao consegui instalar o Debian'; exit 1; }",
+                runInner(inner),
+                "echo '>> [4/4] Iniciando o servidor...'",
                 "tmux kill-session -t " + name + " 2>/dev/null || true",
                 "tmux new-session -d -s " + name + " \"proot-distro login debian $BIND -- bash " + sd
                         + "/run.sh\" \\; set-option -t " + name + " remain-on-exit on",
-                "echo",
-                "echo '>> Servidor iniciando. Console ao vivo abaixo.'",
-                "echo '>> Mundo grande leva varios minutos para gerar. Aceita jogadores quando aparecer: Server started.'",
-                "echo '>> Pode sair do Termux (botao inicio): o servidor continua rodando.'",
                 "sleep 2",
-                "tmux attach -t " + name,
-                "echo",
-                "echo '>> Saiu do console.'",
-                "sleep 5",
+                "if tmux has-session -t " + name + " 2>/dev/null; then",
+                "  echo '>> Servidor em execucao. Quando aparecer Server started, ja aceita jogadores.'",
+                "else",
+                "  echo '>> ERRO: o servidor nao iniciou'",
+                "fi",
                 "");
     }
 
@@ -106,12 +105,10 @@ public final class Scripts {
     }
 
     public static String backup(Profile p) {
-        String inner = String.join("\n",
-                "D=/root/backups/" + p.id,
-                "if [ -d /ts ]; then D=/ts/" + p.id + "/backups; fi",
-                "mkdir -p \"$D\"",
-                "tar czf \"$D/mundo-$(date +%Y%m%d-%H%M%S).tgz\" -C " + p.dir() + " worlds");
-        return sendKeys(p, "save") + " 2>/dev/null || true\nsleep 3\n" + prefix() + runInner(inner);
+        String d = "/storage/emulated/0/TerrariaServer/" + p.id;
+        return sendKeys(p, "save") + " 2>/dev/null || true\nsleep 3\n"
+                + "mkdir -p " + d + "/backups\n"
+                + "tar czf " + d + "/backups/mundo-$(date +%Y%m%d-%H%M%S).tgz -C " + d + " worlds\n";
     }
 
     /** Comando unico para o usuario colar no Termux (libera o app e o armazenamento). */

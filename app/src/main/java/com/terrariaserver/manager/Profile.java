@@ -47,12 +47,17 @@ public class Profile {
         return "/root/servers/" + id;
     }
 
+    /** Pasta dos mundos (dentro do proot); no celular fica em Armazenamento/TerrariaServer/<id>/worlds. */
+    public String worldsDir() {
+        return "/ts/" + id + "/worlds";
+    }
+
     /** serverconfig.txt oficial do Terraria (caminhos dentro do Debian/proot). */
     public String config() {
         StringBuilder b = new StringBuilder();
         b.append("# Gerado pelo app Terraria Server\n");
-        b.append("worldpath=").append(dir()).append("/worlds\n");
-        b.append("world=").append(dir()).append("/worlds/").append(worldFile()).append(".wld\n");
+        b.append("worldpath=").append(worldsDir()).append("\n");
+        b.append("world=").append(worldsDir()).append("/").append(worldFile()).append(".wld\n");
         b.append("worldname=").append(worldFile()).append("\n");
         b.append("autocreate=").append(size + 1).append("\n");
         if (!seed().isEmpty()) {
@@ -67,11 +72,9 @@ public class Profile {
         b.append("secure=").append(secure ? 1 : 0).append("\n");
         b.append("upnp=").append(upnp ? 1 : 0).append("\n");
         b.append("npcstream=").append(smoothNpc ? 60 : 0).append("\n");
-        b.append("banlist=").append(dir()).append("/banlist.txt\n");
-        if (difficulty == 3) {
-            for (String k : Catalog.JOURNEY_KEYS) {
-                b.append("journeypermission_").append(k).append("=").append(journey).append("\n");
-            }
+        b.append("banlist=/ts/").append(id).append("/banlist.txt\n");
+        for (String k : Catalog.JOURNEY_KEYS) {
+            b.append("journeypermission_").append(k).append("=").append(journey).append("\n");
         }
         return b.toString();
     }
