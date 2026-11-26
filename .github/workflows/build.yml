@@ -34,8 +34,11 @@ jobs:
           APK=$(find app/build/outputs -name "*.apk" | head -n 1)
           if [ -z "$APK" ]; then echo "::error::APK nao encontrado"; exit 1; fi
           cp "$APK" "TerrariaServer-$VER.apk"
-          if ! OUT=$(gh release create "v$VER" "TerrariaServer-$VER.apk" --repo "${{ github.repository }}" --title "Terraria Server $VER" --notes "Build automatica $VER" --target "${{ github.sha }}" 2>&1); then
-            echo "::error::$(echo "$OUT" | tr '\n' ' ')"
-            exit 1
-          fi
-          echo "$OUT"
+          OK=0
+          for i in 1 2 3 4 5 6; do
+            gh release view "v$VER" --repo "${{ github.repository }}" >/dev/null 2>&1 || \
+              gh release create "v$VER" --repo "${{ github.repository }}" --title "Terraria Server $VER" --notes "Build automatica $VER" --target "${{ github.sha }}" || true
+            if gh release upload "v$VER" "TerrariaServer-$VER.apk" --clobber --repo "${{ github.repository }}"; then OK=1; break; fi
+            echo "tentativa $i falhou, repetindo..."; sleep 15
+          done
+          if [ "$OK" != "1" ]; then echo "::error::Falha ao publicar o release apos varias tentativas"; exit 1; fi
