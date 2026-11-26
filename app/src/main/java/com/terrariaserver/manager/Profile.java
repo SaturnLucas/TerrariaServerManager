@@ -26,7 +26,9 @@ public class Profile {
     }
 
     public String versionName() {
-        return Catalog.VERSION_LABELS[version].replace(" (mais recente)", "");
+        String l = Catalog.VERSION_LABELS[version];
+        int k = l.indexOf(" (");
+        return k > 0 ? l.substring(0, k) : l;
     }
 
     public String worldFile() {

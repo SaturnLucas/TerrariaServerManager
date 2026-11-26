@@ -5,12 +5,14 @@ public final class Catalog {
 
     // Pacote oficial: terraria.org/api/download/pc-dedicated-server/terraria-server-<codigo>.zip
     public static final String[] VERSION_LABELS = {
-            "1.4.6.1 (mais recente)", "1.4.6", "1.4.5.8", "1.4.5.7", "1.4.5.6", "1.4.5.5",
-            "1.4.5.4", "1.4.5.3", "1.4.5.2", "1.4.5.1", "1.4.5.0", "1.4.4.9", "1.4.4.8.1"
+            "1.4.5.8 (mais recente que roda no celular)", "1.4.5.7", "1.4.5.6", "1.4.5.5",
+            "1.4.5.4", "1.4.5.3", "1.4.5.2", "1.4.5.1", "1.4.5.0", "1.4.4.9", "1.4.4.8.1",
+            "1.4.6.1 (NÃO roda no celular)", "1.4.6 (NÃO roda no celular)"
     };
     public static final String[] VERSION_CODES = {
-            "1461", "146", "1458", "1457", "1456", "1455",
-            "1454", "1453", "1452", "1451", "1450", "1449", "14481"
+            "1458", "1457", "1456", "1455",
+            "1454", "1453", "1452", "1451", "1450", "1449", "14481",
+            "1461", "146"
     };
 
     public static final String[] SIZES = {"Pequeno", "Médio", "Grande"};

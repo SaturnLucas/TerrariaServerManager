@@ -52,7 +52,7 @@ public class ServerEditActivity extends AppCompatActivity {
         section("Servidor");
         etName = text("Nome do servidor", p.name, InputType.TYPE_CLASS_TEXT);
         ddVersion = dropdown("Versão do Terraria", Catalog.VERSION_LABELS, p.version);
-        note("Use a MESMA versão do Terraria do seu celular/PC para todos conseguirem entrar.");
+        note("Use a MESMA versão do Terraria do seu celular para conseguir entrar. A 1.4.6 não funciona em celular (falta uma biblioteca que só existe para PC). Se trocar a versão de um mundo já criado, mude também o nome do mundo: versão antiga não abre mundo de versão nova.");
 
         section("Mundo");
         etWorld = text("Nome do mundo", p.world, InputType.TYPE_CLASS_TEXT);
