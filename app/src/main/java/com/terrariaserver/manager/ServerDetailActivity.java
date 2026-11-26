@@ -74,10 +74,34 @@ public class ServerDetailActivity extends AppCompatActivity {
         etCmd = findViewById(R.id.etCmd);
 
         findViewById(R.id.btnStart).setOnClickListener(v -> {
-            if (ready()) {
-                TermuxBridge.run(this, Scripts.start(p), true);
-                Toast.makeText(this, "Abrindo o Termux para iniciar...", Toast.LENGTH_LONG).show();
+            if (!ready()) {
+                return;
             }
+            if (!getSharedPreferences("prefs", MODE_PRIVATE).getBoolean("termux_prepped", false)) {
+                new MaterialAlertDialogBuilder(this)
+                        .setTitle("Preparar o Termux (uma vez)")
+                        .setMessage("O Termux só aceita comandos do app depois de rodar um comando de preparação.\n\n"
+                                + "1. Toque em \"Copiar e abrir Termux\".\n"
+                                + "2. No Termux, cole (segure na tela > Colar) e dê Enter. Aceite a permissão de armazenamento.\n"
+                                + "3. Volte ao app e toque em \"Já fiz\".")
+                        .setPositiveButton("Copiar e abrir Termux", (d, w) -> {
+                            copy("Termux", Scripts.enableExternalApps());
+                            Intent li = getPackageManager().getLaunchIntentForPackage("com.termux");
+                            if (li != null) {
+                                startActivity(li);
+                            }
+                        })
+                        .setNeutralButton("Já fiz", (d, w) -> {
+                            getSharedPreferences("prefs", MODE_PRIVATE).edit()
+                                    .putBoolean("termux_prepped", true).apply();
+                            TermuxBridge.run(this, Scripts.start(p), true);
+                        })
+                        .setNegativeButton("Cancelar", null)
+                        .show();
+                return;
+            }
+            TermuxBridge.run(this, Scripts.start(p), true);
+            Toast.makeText(this, "Abrindo o Termux para iniciar...", Toast.LENGTH_LONG).show();
         });
         findViewById(R.id.btnStop).setOnClickListener(v -> send("exit"));
         findViewById(R.id.btnSave).setOnClickListener(v -> send("save"));
