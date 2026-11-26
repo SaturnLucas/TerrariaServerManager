@@ -165,7 +165,7 @@
                     android:layout_marginTop="10dp"
                     android:lineSpacingExtra="3dp"
                     android:text="Toque em verificar para buscar novas versões."
-                    android:textColor="@color/text_dim"
+                    
                     android:textSize="15sp" />
                 <ProgressBar
                     android:id="@+id/progress"
