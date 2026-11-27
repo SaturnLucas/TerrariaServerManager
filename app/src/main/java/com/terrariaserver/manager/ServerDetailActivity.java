@@ -416,19 +416,41 @@ public class ServerDetailActivity extends AppCompatActivity {
         return null;
     }
 
+    /**
+     * NUNCA abrir conexao na porta do servidor: o servidor do Terraria (mono) cai quando uma
+     * conexao fecha sem enviar dados. O status vem do arquivo .alive que o proprio servidor atualiza.
+     */
     private void checkStatus() {
-        final int port = p.port;
+        if (!hasStorage()) {
+            tvStatus.setText("● Sem acesso aos arquivos");
+            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.warn));
+            return;
+        }
+        final File f = new File("/storage/emulated/0/TerrariaServer/" + p.id + "/.alive");
         io.execute(() -> {
-            boolean ok = false;
-            try (Socket s = new Socket()) {
-                s.connect(new InetSocketAddress("127.0.0.1", port), 1500);
-                ok = true;
+            int state = 0; // 0 offline, 1 iniciando, 2 online
+            try {
+                if (f.exists() && System.currentTimeMillis() - f.lastModified() < 15000) {
+                    try (RandomAccessFile r = new RandomAccessFile(f, "r")) {
+                        byte[] b = new byte[(int) Math.min(16, r.length())];
+                        r.readFully(b);
+                        state = new String(b, "UTF-8").trim().equals("ready") ? 2 : 1;
+                    }
+                }
             } catch (Exception ignored) {
             }
-            final boolean r = ok;
+            final int st = state;
             ui.post(() -> {
-                tvStatus.setText(r ? "● Online" : "● Offline");
-                tvStatus.setTextColor(ContextCompat.getColor(this, r ? R.color.online : R.color.offline));
+                if (st == 2) {
+                    tvStatus.setText("● Online");
+                    tvStatus.setTextColor(ContextCompat.getColor(this, R.color.online));
+                } else if (st == 1) {
+                    tvStatus.setText("● Iniciando (gerando mundo)...");
+                    tvStatus.setTextColor(ContextCompat.getColor(this, R.color.warn));
+                } else {
+                    tvStatus.setText("● Offline");
+                    tvStatus.setTextColor(ContextCompat.getColor(this, R.color.offline));
+                }
             });
         });
     }

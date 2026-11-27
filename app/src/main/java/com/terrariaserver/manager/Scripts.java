@@ -28,9 +28,17 @@ public final class Scripts {
                 "#!/bin/bash",
                 "export TERM=xterm",
                 "LOG=/ts/" + p.id + "/server.log",
+                "ALIVE=/ts/" + p.id + "/.alive",
+                "( while true; do",
+                "    if grep -qE ' " + p.port + "[[:space:]]*$' \"$LOG\" 2>/dev/null; then echo ready > \"$ALIVE\"; else echo starting > \"$ALIVE\"; fi",
+                "    sleep 4",
+                "  done ) &",
+                "HB=$!",
                 "cd /root/terraria/" + code + "/Linux",
                 "mono --server --gc=sgen -O=all ./TerrariaServer.exe -config " + sd
-                        + "/serverconfig.txt 2>&1 | sed -u 's/\\x1b\\[[0-9;?]*[a-zA-Z]//g' | tee -a \"$LOG\"");
+                        + "/serverconfig.txt 2>&1 | sed -u 's/\\x1b\\[[0-9;?]*[a-zA-Z]//g' | tee -a \"$LOG\"",
+                "kill $HB 2>/dev/null",
+                "rm -f \"$ALIVE\"");
         String inner = String.join("\n",
                 "set -e",
                 "export DEBIAN_FRONTEND=noninteractive TERM=xterm",
